@@ -72,18 +72,20 @@ class WProxy:
                 break
         #
         logging.info("Redirecting %s to [%s][%s]" % (request_url, proxy_host, proxy_port))
-
         proxy_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        proxy_sock.connect((proxy_host, proxy_port))
-        proxy_sock.send(request)
-        while 1:
-            data = proxy_sock.recv(102400)
-            if (len(data) > 0):
-                connection.send(data)
-            else:
-                break
-        proxy_sock.close()
-        connection.close()
+        try:
+            proxy_sock.connect((proxy_host, proxy_port))
+            proxy_sock.send(request)
+            while 1:
+                data = proxy_sock.recv(102400)
+                if (len(data) > 0):
+                    connection.send(data)
+                else:
+                    break
+        except Exception, e:
+            logging.error("Socket Error: [%s][%s][%s]" % (proxy_host, proxy_port,str(e)))
+            proxy_sock.close()
+            connection.close()
 
 
     def __parse_argues(self):
