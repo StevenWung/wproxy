@@ -4,6 +4,7 @@ import sys
 import json
 import thread
 import socket
+import logging
 
 
 class WProxy:
@@ -16,11 +17,24 @@ class WProxy:
     proxy = []
 
     def __init__(self):
+        logging.basicConfig(
+            filename='proxy.log',
+            level=logging.INFO,
+            format='[%(asctime)s] %(levelname)s  {%(filename)s:%(lineno)d} - %(message)s',
+            datefmt='%H:%M:%S'
+        )
+        logging.getLogger("requests").setLevel(logging.WARNING)
+
+        stderrLogger = logging.StreamHandler()
+        stderrLogger.setFormatter(
+            logging.Formatter('[%(asctime)s] %(levelname)s  {%(filename)s:%(lineno)d} - %(message)s'))
+        logging.getLogger().addHandler(stderrLogger)
+        logging.getLogger('requests').setLevel(logging.WARNING)
         self.__parse_argues()
         self.__read_config()
 
     def run(self):
-        self.echo("Running %s" % self.name)
+        logging.info("Running %s" % self.name)
         #
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
@@ -31,7 +45,7 @@ class WProxy:
                 thread.start_new_thread(self.__accept, (conn, address))
 
         except Exception, e:
-            self.echo("Sock Error : %s" % str(e))
+            logging.error("Sock Error : %s" % str(e))
         if self.sock is not None:
             self.sock.close()
 
@@ -42,10 +56,12 @@ class WProxy:
     def __accept(self, connection, address):
         request = connection.recv(10240)
         protocol_line = request.split('\r')[0]
+
         try:
             request_url = protocol_line.split(' ')[1]
         except Exception, e:
-            self.echo("Exception : %s [%s]" % (str(e), protocol_line))
+            logging.info("Exception : %s [%s]" % (str(e), protocol_line))
+            return
         #
         proxy_host = ''
         proxy_port = ''
@@ -55,11 +71,13 @@ class WProxy:
             if re.match(proxy['regex'], request_url):
                 break
         #
+        logging.info("Redirecting %s to [%s][%s]" % (request_url, proxy_host, proxy_port))
+
         proxy_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         proxy_sock.connect((proxy_host, proxy_port))
         proxy_sock.send(request)
         while 1:
-            data = proxy_sock.recv(10240)
+            data = proxy_sock.recv(102400)
             if (len(data) > 0):
                 connection.send(data)
             else:
@@ -67,15 +85,15 @@ class WProxy:
         proxy_sock.close()
         connection.close()
 
-    def echo(self, msg):
-        print msg
 
     def __parse_argues(self):
         if len(sys.argv) > 1:
             self.config_file = sys.argv[1]
             if not os._exists(self.config_file):
-                self.echo("config file doesnot exist")
-                exit(1)
+                self.config_file = "%s/%s" % (os.path.dirname(sys.argv[0]), self.config_file)
+                if not os.path.exists(self.config_file):
+                    logging.error("config file doesnot exist")
+                    exit(1)
 
     def __read_config(self):
         fd = open(self.config_file, 'r')
@@ -94,7 +112,7 @@ class WProxy:
         #
         # validate
         if len(self.proxy) == 0:
-            self.echo("Error proxy route should be set")
+            logging.error("Error proxy route should be set")
             exit(1)
 
 
